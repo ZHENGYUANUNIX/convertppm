@@ -17,8 +17,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     this->setWindowFlags(Qt::WindowCloseButtonHint);
     ui->buttonConvert->setDisabled(true);
     ui->buttonStopConvert->setDisabled(true);
-    ui->progressBar->setStyleSheet("QProgressBar{border:none;background:#E5E5E5;border-radius:2px;}"
-                                   "QProgressBar::chunk{background:#009DD6;border-radius:2px;}");
     ui->progressBar->setValue(70);
     ui->progressBar->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
