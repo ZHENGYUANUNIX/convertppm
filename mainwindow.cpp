@@ -1,6 +1,7 @@
 ﻿#include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include <QFileDialog>
+#include <QMessageBox>
 
 
 
@@ -10,8 +11,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     this->setWindowFlags(Qt::WindowCloseButtonHint);
     ui->buttonConvert->setDisabled(true);
     ui->buttonStopConvert->setDisabled(true);
-    ui->progressBar->setValue(70);
+    ui->buttonStopConvert->setDisabled(true);
     ui->progressBar->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    ui->progressBar->setMinimum(0);
+    ui->progressBar->setMaximum(100);
+    ui->progressBar->setValue(100);
 
     connect(&thread, &ConvertThread::started, this, &MainWindow::on_thread_started);
     connect(&thread, &ConvertThread::finished, this, &MainWindow::on_thread_finished);
@@ -32,49 +36,42 @@ void MainWindow::on_buttonLoadMap_clicked()
                                                     QStringLiteral("地图文件(*.smap)"));
     if (!fileName.isEmpty())
     {
+        thread.setSMapPath(fileName);
         ui->labelPath->setText(QStringLiteral("地图文件:") + fileName);
         ui->buttonConvert->setDisabled(false);
     }
-    ui->progressBar->setValue(0);
 }
 
 
 void MainWindow::on_buttonConvert_clicked()
 {
-    ui->buttonStopConvert->setDisabled(false);
     thread.start();
 }
 
 void MainWindow::on_thread_started()
 {
-
+    ui->buttonStopConvert->setDisabled(false);
+    ui->buttonLoadMap->setDisabled(true);
+    ui->buttonConvert->setDisabled(true);
+    ui->buttonConvert->setText(QStringLiteral("转换中..."));
+    ui->progressBar->setMaximum(0);
 }
 
 void MainWindow::on_thread_finished()
 {
+    ui->buttonConvert->setText(QStringLiteral("开始转换"));
+    ui->buttonConvert->setDisabled(false);
+    //QMessageBox::information(this, QStringLiteral("SMap转PPM"), QStringLiteral("数据转换成功, 文件保存在") + thread.getSMapPath().replace(QString(".smap"), QString(".PPM")), QStringLiteral("确定"));
+    QMessageBox::information(this, QStringLiteral("SMap转PPM"), QStringLiteral("数据转换完成."), QStringLiteral("确定"));
+    ui->buttonLoadMap->setDisabled(false);
+    ui->buttonStopConvert->setDisabled(true);
+    ui->progressBar->setMaximum(100);
+    ui->progressBar->setValue(100);
 
 }
 
-
-
-
-const char *MainWindow::__strstr(const char *src, const char *needle)
+void MainWindow::on_buttonStopConvert_clicked()
 {
-    const char *p1 = nullptr, *p2 = nullptr;
-    p1 = src;
-    p2 = needle;
-    while (src != needle && *needle != '\0')
-    {
-        if (*src++ != *needle++)
-        {
-            needle = p2;
-            src = ++p1;
-        }
-    }
-    if (*needle == '\0')
-    {
-        return p1;
-    }
-
-    return NULL;
+    thread.setStop();
+    ui->progressBar->setMaximum(100);
 }

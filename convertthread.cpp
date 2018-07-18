@@ -1,4 +1,4 @@
-#include "convertthread.h"
+﻿#include "convertthread.h"
 #include <QCoreApplication>
 #include <QDebug>
 #include <QString>
@@ -7,7 +7,7 @@
 #include <stdlib.h>
 
 #define CM_PRECISION_100 100
-#define PIXEL_BLACK_ROBOT_SIZE 5
+#define PIXEL_BLACK_ROBOT_SIZE 1
 
 ConvertThread::ConvertThread()
 {
@@ -23,13 +23,37 @@ ConvertThread::~ConvertThread()
     }
 }
 
+void ConvertThread::setSMapPath(QString &stringPath)
+{
+    pathSMap = stringPath;
+}
+
+QString ConvertThread::getSMapPath()
+{
+    return pathSMap;
+}
+
+void ConvertThread::setStop()
+{
+    m_stop = true;
+}
+
 void ConvertThread::run()
 {
     m_stop = false;
-    getSMapSize();
-    createPPMDate();
-    importSMap();
+    if (readSMapDate())
+    {
+        getSMapSize();
+        createPPMDate();
+        if (!importSMap())
+        {
+            clearDate();
+            exit(-1);
+        }
+    }
     savePPM();
+    clearDate();
+    return;
 }
 
 void ConvertThread::getSMapSize()
@@ -44,51 +68,72 @@ void ConvertThread::getSMapSize()
     pointMin.setY(minY);
     pointMax.setX(maxX);
     pointMax.setY(maxY);
-    widthPPM = qAbs(maxX - minX) * CM_PRECISION_100;
-    heightPPM = qAbs(maxY - minY) * CM_PRECISION_100;
+    widthPPM = qAbs((maxX - minX) * CM_PRECISION_100);
+    heightPPM = qAbs((maxY - minY) * CM_PRECISION_100);
     lengthDate = widthPPM * heightPPM;
+    baseX = qAbs(minX * CM_PRECISION_100);
+    baseY = qAbs(minY * CM_PRECISION_100);
 
-    qDebug() << QStringLiteral("pixel width=") + QString::number(widthPPM) + QStringLiteral(", pixel height=") + QString::number(heightPPM);
-    qDebug() << QStringLiteral("data length=") + QString::number(lengthDate);
+    qDebug() << QStringLiteral("PPM宽度=") + QString::number(widthPPM) + QStringLiteral(", PPM高度=") + QString::number(heightPPM);
+    qDebug() << QStringLiteral("PPM数据长度=") + QString::number(lengthDate);
 }
 
 void ConvertThread::createPPMDate()
 {
-    qDebug() << QStringLiteral("宽度:") + QString::number(widthPPM) + QStringLiteral(", 高度:") + QString::number(heightPPM);
     ptrPPMDate = new Color[lengthDate];
-    memset((char *)ptrPPMDate, 0x11, sizeof(Color) * lengthDate);
-    qDebug() << QStringLiteral("数据的长度为") + QString::number(strlen((char*)ptrPPMDate));
-    std::cout << (char*)ptrPPMDate << std::endl;
+    memset(ptrPPMDate, 0xFF, sizeof(Color) * lengthDate);
 }
 
-void ConvertThread::importSMap()
+bool ConvertThread::importSMap()
 {
-    const char* ptrPos = stringSMapDate.data() + stringSMapDate.indexOf(QChar('['));
-    const char* ptrPosListEnd = stringSMapDate.data() + stringSMapDate.indexOf(QChar(']'));
+    int posStart = stringSMapDate.indexOf(QString("\"normalPosList\""));
+    const char* ptrPos = stringSMapDate.data() + posStart;
+    const char* ptrPosListEnd = stringSMapDate.data() +  stringSMapDate.indexOf(QChar(']'), posStart);
     const char* pX = nullptr;
     const char* pY = nullptr;
     char dataTmp[10] = {0};
-    while (ptrPos + 2 * sizeof(char) <= ptrPosListEnd)
+    while (ptrPos + sizeof(char) < ptrPosListEnd)
     {
+        if (m_stop)
+        {
+            return false;
+        }
         QPointF point;
         pX = strstr(ptrPos, "\"x\":") + 4;
         pY = strstr(ptrPos, "\"y\":") - 1;
+        // smap地图中有异常数据, 例如{"y":5.86}, 没有x数据的点, 需要调整到下一个数据点
+        if (pX > pY)
+        {
+            pX -= 4 * sizeof(char);
+            pY = pX;
+            ptrPos = pX;
+            continue;
+        }
         strncpy(dataTmp, pX, (pY - pX)/sizeof(char));
-        point.setX(atof(dataTmp));
+        point.setX(atof(dataTmp) * CM_PRECISION_100 + baseX);
         pY += 5;     // ,"y":
         ptrPos = pY;
         pX = strstr(ptrPos, "}");
         strncpy(dataTmp, pY, (pX - pY)/sizeof(char));
-        point.setY(atof(dataTmp));
+        point.setY(atof(dataTmp) * CM_PRECISION_100 + baseY);
         ptrPos = pX;
-        vector.append(point);
-        setPointRoundValue(point.rx() * CM_PRECISION_100, point.ry() * CM_PRECISION_100);
+        //vector.append(point);
+        qDebug() << QString::number(point.rx()) + QString("-") + QString::number(point.ry());
+        qDebug() << QString::number(baseX) + QString("-") + QString::number(baseY);
+        qDebug() << QString::number(qAbs(point.rx() * CM_PRECISION_100) + baseX) +
+                                    QString("=") +
+                                    QString::number(qAbs(point.ry() * CM_PRECISION_100) + baseY);
+
+        setPointRoundValue(point.rx(), point.ry());
     }
+
+    return true;
 }
 
 void ConvertThread::savePPM()
 {
-    QString fileName = QCoreApplication::applicationDirPath() + QString("/map.ppm");
+    QString fileName = pathSMap.section(QChar('\\'), -1, -1).replace(QString(".smap"), QString(".PPM"), Qt::CaseInsensitive);
+    qDebug() << fileName;
     FILE *fp;
     fp = fopen(fileName.toLatin1(), "wb+");
     if (fp == nullptr)
@@ -99,37 +144,64 @@ void ConvertThread::savePPM()
     fprintf(fp, "P6\n");
     fprintf(fp, "%d %d\n", widthPPM, heightPPM);
     fprintf(fp, "%d\n", 255);  // RGB marker
-
-    fwrite(ptrPPMDate, heightPPM * widthPPM + 1000, sizeof(Color), fp);
+    if (ptrPPMDate)
+    {
+        fwrite(ptrPPMDate, lengthDate, sizeof(Color), fp);
+    }
     fclose(fp);
     qDebug() << QStringLiteral("PPM文件保存.");
+}
+
+void ConvertThread::setPointRoundValue(const int row, const int column)
+{
+    qDebug() << QString::number(row) + QString("*") + QString::number(column);
+    // 因为smap地图是散点，需要连接起来，以便规划路径，考虑到机器人的尺寸，将散点周围的点描黑，形成连接线
+    // 具体PIXEL_BLACK_ROBOT_SIZE给定多少，根据实际情况调整
+    for (int i = -PIXEL_BLACK_ROBOT_SIZE; i <= PIXEL_BLACK_ROBOT_SIZE; i++)
+    {
+        for (int j = -PIXEL_BLACK_ROBOT_SIZE; j <= PIXEL_BLACK_ROBOT_SIZE; j++)
+        {
+            setPointValue(row + i, column + j);
+        }
+    }
+    // 散点地图
+    // setPointValue(row, column);
+}
+
+void ConvertThread::setPointValue(const int row, const int column)
+{
+    if (row > 0 && column > 0)
+    {
+        if (row < widthPPM && column < heightPPM)
+        {
+            *(ptrPPMDate + (column - 1) * widthPPM + (row - 1)) = white;
+        }
+    }
+}
+
+bool ConvertThread::readSMapDate()
+{
+    QFile file(pathSMap);
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream readIn(&file);
+        stringSMapDate = readIn.readAll().toLatin1();
+        file.close();
+        return true;
+    }
+    else {
+        qDebug() << QStringLiteral("SMAP地图读取失败.");
+        return false;
+    }
+}
+
+void ConvertThread::clearDate()
+{
     if (ptrPPMDate)
     {
         delete ptrPPMDate;
         ptrPPMDate = nullptr;
     }
-    vector.clear();
-}
-
-void ConvertThread::setPointRoundValue(const int row, const int column)
-{
-    for (int i = -PIXEL_BLACK_ROBOT_SIZE; i <= PIXEL_BLACK_ROBOT_SIZE; i++)
-    {
-        for (int j = -PIXEL_BLACK_ROBOT_SIZE; j <= PIXEL_BLACK_ROBOT_SIZE; j++)
-        {
-            if (row > 0 && column > 0)
-            {
-                if (row < widthPPM && column < heightPPM)
-                {
-                    setPointValue(row + i, column + j);
-                }
-            }
-        }
-    }
-}
-
-void ConvertThread::setPointValue(const int row, const int column)
-{
-    memset(ptrPPMDate + ((column - 1) * widthPPM + (row - 1)), 0, sizeof(Color));
+    //vector.clear();
+    stringSMapDate.clear();
 }
 

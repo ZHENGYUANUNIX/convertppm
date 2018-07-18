@@ -1,4 +1,4 @@
-#ifndef CONVERTTHREAD_H
+﻿#ifndef CONVERTTHREAD_H
 #define CONVERTTHREAD_H
 
 #include <QThread>
@@ -10,40 +10,48 @@ class ConvertThread : public QThread
     Q_OBJECT
     class Color
     {
-      char Red;
-      char Green;
-      char Blue;
-
+        char Red;
+        char Green;
+        char Blue;
     };
 public:
     ConvertThread();
     ~ConvertThread();
 
     void convertStop();
-public:
-    QString pathSMap;
+    void setSMapPath(QString &stringPath);
+    QString getSMapPath();
+    void setStop();
+
 protected:
     void run() Q_DECL_OVERRIDE;
 
 private:
 
     bool m_stop {false};
-    QVector<QPointF> vector;
+    //QVector<QPointF> vector;
     QByteArray stringSMapDate;
     QPointF pointMin;
     QPointF pointMax;
+    QString pathSMap;
 
+    int baseX;
+    int baseY;
     int heightPPM;
     int widthPPM;
     int lengthDate;
     Color *ptrPPMDate {nullptr};
+    Color white;
 
     void getSMapSize();
     void createPPMDate();
-    void importSMap();
+    bool importSMap();
     void savePPM();
     void setPointRoundValue(const int row, const int column);
     void setPointValue(const int row, const int column);
+    bool readSMapDate();
+    void clearDate();
+
 signals:
     void progress(int value);
 };

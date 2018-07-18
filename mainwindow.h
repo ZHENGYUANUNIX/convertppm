@@ -1,4 +1,4 @@
-#ifndef MAINWINDOW_H
+﻿#ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
 #include "convertthread.h"
@@ -21,12 +21,11 @@ public:
 private slots:
     void on_buttonLoadMap_clicked();
     void on_buttonConvert_clicked();
+    void on_buttonStopConvert_clicked();
     void on_thread_started();
     void on_thread_finished();
 
 private:
-
-    const char* __strstr(const char* src, const char* needle);
     ConvertThread thread;
     Ui::MainWindow *ui;
 };
