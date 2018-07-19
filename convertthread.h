@@ -10,9 +10,9 @@ class ConvertThread : public QThread
     Q_OBJECT
     class Color
     {
-        char Red;
-        char Green;
-        char Blue;
+        char Red {0};
+        char Green {0};
+        char Blue {0};
     };
 public:
     ConvertThread();
@@ -41,12 +41,13 @@ private:
     int widthPPM;
     int lengthDate;
     Color *ptrPPMDate {nullptr};
-    Color white;
+    Color black;
 
     void getSMapSize();
     void createPPMDate();
     bool importSMap();
     void savePPM();
+    void savePPMDate();
     void setPointRoundValue(const int row, const int column);
     void setPointValue(const int row, const int column);
     bool readSMapDate();

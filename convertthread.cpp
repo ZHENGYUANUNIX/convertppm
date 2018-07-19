@@ -7,7 +7,7 @@
 #include <stdlib.h>
 
 #define CM_PRECISION_100 100
-#define PIXEL_BLACK_ROBOT_SIZE 1
+#define PIXEL_BLACK_ROBOT_SIZE 10
 
 ConvertThread::ConvertThread()
 {
@@ -52,6 +52,7 @@ void ConvertThread::run()
         }
     }
     savePPM();
+    savePPMDate();
     clearDate();
     return;
 }
@@ -132,13 +133,16 @@ bool ConvertThread::importSMap()
 
 void ConvertThread::savePPM()
 {
-    QString fileName = pathSMap.section(QChar('\\'), -1, -1).replace(QString(".smap"), QString(".PPM"), Qt::CaseInsensitive);
-    qDebug() << fileName;
+#if defined(Q_OS_WIN32)
+    QString fileName = pathSMap.section(QChar('\\'), -1, -1).replace(QString(".smap"), QString(".ppm"), Qt::CaseInsensitive);
+#elif defined(Q_OS_LINUX)
+    QString fileName("./smap.ppm");
+#endif
     FILE *fp;
     fp = fopen(fileName.toLatin1(), "wb+");
     if (fp == nullptr)
     {
-        qDebug() << QStringLiteral("文件创建失败.");
+        qDebug() << fileName + QStringLiteral("文件创建失败.");
         return;
     }
     fprintf(fp, "P6\n");
@@ -150,6 +154,26 @@ void ConvertThread::savePPM()
     }
     fclose(fp);
     qDebug() << QStringLiteral("PPM文件保存.");
+}
+
+void ConvertThread::savePPMDate()
+{
+#if defined(Q_OS_WIN32)
+    QString fileName = pathSMap.section(QChar('\\'), -1, -1).replace(QString(".smap"), QString(".dat"), Qt::CaseInsensitive);
+#elif define(Q_OS_LINUX)
+    QString fileName("./smap.dat");
+#endif
+    FILE *fp;
+    fp = fopen(fileName.toLatin1(), "wb+");
+    if (fp == nullptr)
+    {
+        qDebug() << fileName + QStringLiteral("文件创建失败.");
+        return;
+    }
+
+    fprintf(fp, "minPosX:%.3f;\nminPosY:%.3f;\nwidthPPM:%d;\nheightPPM:%d;\n以上数据为规划路径需要,请勿手动修改.", pointMin.rx(), pointMin.ry(), widthPPM, heightPPM);
+    fclose(fp);
+    qDebug() << QStringLiteral("ppm dat文件保存.");
 }
 
 void ConvertThread::setPointRoundValue(const int row, const int column)
@@ -174,7 +198,7 @@ void ConvertThread::setPointValue(const int row, const int column)
     {
         if (row < widthPPM && column < heightPPM)
         {
-            *(ptrPPMDate + (column - 1) * widthPPM + (row - 1)) = white;
+            *(ptrPPMDate + (column - 1) * widthPPM + (row - 1)) = black;
         }
     }
 }
@@ -182,7 +206,8 @@ void ConvertThread::setPointValue(const int row, const int column)
 bool ConvertThread::readSMapDate()
 {
     QFile file(pathSMap);
-    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
         QTextStream readIn(&file);
         stringSMapDate = readIn.readAll().toLatin1();
         file.close();
