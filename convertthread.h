@@ -10,9 +10,9 @@ class ConvertThread : public QThread
     Q_OBJECT
     class Color
     {
-        char Red {0};
-        char Green {0};
-        char Blue {0};
+        unsigned char Red {0};
+        unsigned char Green {0};
+        unsigned char Blue {0};
     };
 public:
     ConvertThread();

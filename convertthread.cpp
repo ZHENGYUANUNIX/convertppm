@@ -6,8 +6,8 @@
 #include <iostream>
 #include <stdlib.h>
 
-#define CM_PRECISION_100 100
-#define PIXEL_BLACK_ROBOT_SIZE 10
+#define CM_PRECISION_100            100
+#define PIXEL_BLACK_ROBOT_SIZE      20
 
 ConvertThread::ConvertThread()
 {
@@ -45,14 +45,16 @@ void ConvertThread::run()
     {
         getSMapSize();
         createPPMDate();
+
         if (!importSMap())
         {
             clearDate();
             exit(-1);
         }
+        savePPM();
+        savePPMDate();
     }
-    savePPM();
-    savePPMDate();
+
     clearDate();
     return;
 }
@@ -72,8 +74,8 @@ void ConvertThread::getSMapSize()
     widthPPM = qAbs((maxX - minX) * CM_PRECISION_100);
     heightPPM = qAbs((maxY - minY) * CM_PRECISION_100);
     lengthDate = widthPPM * heightPPM;
-    baseX = qAbs(minX * CM_PRECISION_100);
-    baseY = qAbs(minY * CM_PRECISION_100);
+    baseX = minX * CM_PRECISION_100;
+    baseY = minY * CM_PRECISION_100;
 
     qDebug() << QStringLiteral("PPM宽度=") + QString::number(widthPPM) + QStringLiteral(", PPM高度=") + QString::number(heightPPM);
     qDebug() << QStringLiteral("PPM数据长度=") + QString::number(lengthDate);
@@ -88,18 +90,21 @@ void ConvertThread::createPPMDate()
 bool ConvertThread::importSMap()
 {
     int posStart = stringSMapDate.indexOf(QString("\"normalPosList\""));
-    const char* ptrPos = stringSMapDate.data() + posStart;
-    const char* ptrPosListEnd = stringSMapDate.data() +  stringSMapDate.indexOf(QChar(']'), posStart);
+    const char* ptrPos = stringSMapDate.constData() + posStart;
+    const char* ptrPosListEnd = stringSMapDate.constData() +  stringSMapDate.indexOf(QChar(']'), posStart);
     const char* pX = nullptr;
     const char* pY = nullptr;
     char dataTmp[10] = {0};
+    QPointF point;
+
+    qDebug() << QStringLiteral("baseX: ") + QString::number(baseX)+ QStringLiteral("    baseY: ") + QString::number(baseY);
+
     while (ptrPos + sizeof(char) < ptrPosListEnd)
     {
         if (m_stop)
         {
             return false;
         }
-        QPointF point;
         pX = strstr(ptrPos, "\"x\":") + 4;
         pY = strstr(ptrPos, "\"y\":") - 1;
         // smap地图中有异常数据, 例如{"y":5.86}, 没有x数据的点, 需要调整到下一个数据点
@@ -110,20 +115,39 @@ bool ConvertThread::importSMap()
             ptrPos = pX;
             continue;
         }
+        else
+        {
+            // smap地图中有异常数据, 例如{"x":5.86}, 没有y数据的点
+            // 如果{"x":5.86}刚好是最后一个数据点
+            if (nullptr == pY || pY >= ptrPosListEnd)
+            {
+                break;
+            }
+            // 如果{"x":5.86}不是最后一个数据点，需要调整到下一组数据点位置继续
+            else if ((pY - pX)/sizeof(char) >= 10)
+            {
+                ptrPos = pX;
+                pX = strstr(ptrPos, "\"x\":");
+                if (nullptr == pX || pX > ptrPosListEnd)
+                {
+                    break;
+                }
+                pY = pX;
+                continue;
+            }
+        }
         strncpy(dataTmp, pX, (pY - pX)/sizeof(char));
-        point.setX(atof(dataTmp) * CM_PRECISION_100 + baseX);
-        pY += 5;     // ,"y":
+        qDebug() << QStringLiteral("x:") + QString::number(atof(dataTmp));
+        point.setX(atof(dataTmp) * CM_PRECISION_100 - baseX);
+        pY += 5 * sizeof(char);     // ,"y":
         ptrPos = pY;
         pX = strstr(ptrPos, "}");
         strncpy(dataTmp, pY, (pX - pY)/sizeof(char));
-        point.setY(atof(dataTmp) * CM_PRECISION_100 + baseY);
+        qDebug() << QStringLiteral("y:") + QString::number(atof(dataTmp));
+        point.setY(atof(dataTmp) * CM_PRECISION_100 - baseY);
         ptrPos = pX;
+
         //vector.append(point);
-        qDebug() << QString::number(point.rx()) + QString("-") + QString::number(point.ry());
-        qDebug() << QString::number(baseX) + QString("-") + QString::number(baseY);
-        qDebug() << QString::number(qAbs(point.rx() * CM_PRECISION_100) + baseX) +
-                                    QString("=") +
-                                    QString::number(qAbs(point.ry() * CM_PRECISION_100) + baseY);
 
         setPointRoundValue(point.rx(), point.ry());
     }
